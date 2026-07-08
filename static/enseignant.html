@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LMS - Dashboard Enseignant</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .form-card {
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid #e5e7eb;
+        }
+        .form-card h3 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #f3f4f6;
+            padding-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container page-shell" style="max-width: 750px; margin: 2rem auto;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h2>🎓 Espace Enseignant</h2>
+            <button onclick="logout()" class="btn-logout" style="background-color: #EF4444; color: white;">Se déconnecter</button>
+        </div>
+        
+        <div class="form-card" style="margin-bottom: 1.5rem;">
+            <h3>1. Créer un Nouveau Cours</h3>
+            <form id="course-form">
+                <div class="form-group">
+                    <label for="course-title">Titre du cours</label>
+                    <input type="text" id="course-title" placeholder="Ex: Introduction à Javascript" required>
+                </div>
+                <div class="form-group">
+                    <label for="course-tag">Tag (Mot-clé d'évaluation)</label>
+                    <input type="text" id="course-tag" placeholder="Ex: javascript" required>
+                    <small style="color:#6B7280;">Ce mot-clé permettra de lier automatiquement les questions au cours.</small>
+                </div>
+                <div class="form-group">
+                    <label for="course-module-id">Module associé</label>
+                    <select id="course-module-id" required>
+                        <option value="">Chargement des modules...</option>
+                    </select>
+                    <small style="color:#6B7280;">Les modules doivent préalablement être créés par le Promoteur.</small>
+                </div>
+                <button type="submit">Créer le cours</button>
+            </form>
+        </div>
+
+        <div class="form-card" style="margin-bottom: 1.5rem;">
+            <h3>2. Ajouter un Contenu (Leçon Vidéo ou PDF)</h3>
+            <form id="lesson-form">
+                <div class="form-group">
+                    <label for="les-title">Titre de la leçon</label>
+                    <input type="text" id="les-title" placeholder="Ex: Utilisation de Fetch/AJAX" required>
+                </div>
+                <div class="form-group">
+                    <label for="les-course-id">Sélectionner le Cours cible</label>
+                    <select id="les-course-id" required>
+                        <option value="">-- Chargez ou sélectionnez un cours --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="les-file">Fichier Pédagogique (Max 50Mo)</label>
+                    <input type="file" id="les-file" accept=".pdf, .mp4" required>
+                </div>
+                <button type="submit">Uploader le fichier</button>
+            </form>
+        </div>
+
+        <div class="form-card">
+            <h3>3. Alimenter la Banque de Questions</h3>
+            <p style="font-size: 0.9rem; color: #4B5563; margin-bottom: 1rem;">
+                Ajoutez des questions au système. Elles seront générées dynamiquement lors du quiz final de l'étudiant selon le <strong>Tag</strong> choisi.
+            </p>
+            <form id="quiz-form">
+                <div class="form-group">
+                    <label for="question-tag">Tag ciblé (Doit correspondre au tag d'un cours)</label>
+                    <input type="text" id="question-tag" placeholder="Ex: javascript" required>
+                </div>
+                
+                <div id="quiz-questions-container"></div>
+                
+                <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-top:1rem;">
+                    <button type="button" onclick="addQuizQuestion()" style="background-color: #6B7280; color: white;">+ Ajouter une question</button>
+                    <button type="submit">Sauvegarder dans la Banque</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="message-box"></div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    
+    <script>
+        // ==========================================
+        // CHARGEMENT DES DONNÉES INITIALES
+        // ==========================================
+        
+        async function loadModules() {
+            try {
+                const modules = await apiCall('/api/enseignant/modules', 'GET');
+                const selectElement = document.getElementById('course-module-id');
+                selectElement.innerHTML = '<option value="">-- Choisir un module --</option>';
+
+                if (modules.length === 0) {
+                    selectElement.innerHTML = '<option value="">⚠️ Aucun module disponible (Contactez le Promoteur).</option>';
+                    return;
+                }
+
+                modules.forEach(module => {
+                    const option = document.createElement('option');
+                    option.value = module.id;
+                    option.textContent = module.title;
+                    selectElement.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Erreur modules :', error);
+            }
+        }
+
+        async function loadTeacherCourses() {
+            try {
+                const courses = await apiCall('/api/enseignant/courses', 'GET');
+                const selectElement = document.getElementById('les-course-id');
+                
+                selectElement.innerHTML = '<option value="">-- Choisir un cours existant --</option>';
+                
+                if (courses.length === 0) {
+                    selectElement.innerHTML = '<option value="">⚠️ Aucun cours créé. Commencez par l\'étape 1.</option>';
+                    return;
+                }
+
+                courses.forEach(course => {
+                    const option = document.createElement('option');
+                    option.value = course.id;
+                    option.textContent = `[Tag: ${course.content_tag}] ${course.title}`;
+                    selectElement.appendChild(option);
+                });
+            } catch (error) {
+                console.error("Erreur cours :", error);
+            }
+        }
+
+        // ==========================================
+        // GESTION DYNAMIQUE DE L'INTERFACE QUIZ
+        // ==========================================
+        
+        function addQuizQuestion() {
+            const container = document.getElementById('quiz-questions-container');
+            const index = container.children.length + 1;
+            const block = document.createElement('div');
+            
+            block.className = 'quiz-question-block';
+            block.style.border = '1px solid #E5E7EB';
+            block.style.padding = '1rem';
+            block.style.borderRadius = '8px';
+            block.style.marginBottom = '1rem';
+            block.style.backgroundColor = '#F9FAFB';
+            
+            block.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+                    <strong>Question ${index}</strong>
+                    <button type="button" style="background:transparent; color:#EF4444; border:none; padding:0; cursor:pointer;" onclick="this.parentElement.parentElement.remove()">❌ Retirer</button>
+                </div>
+                <div class="form-group">
+                    <label>Intitulé de la question</label>
+                    <input type="text" class="quiz-question-text" placeholder="Ex: Que signifie JS ?" required>
+                </div>
+                <div class="form-group">
+                    <label>Proposition 1</label>
+                    <input type="text" class="quiz-choice" placeholder="Réponse possible..." required>
+                </div>
+                <div class="form-group">
+                    <label>Proposition 2</label>
+                    <input type="text" class="quiz-choice" placeholder="Réponse possible..." required>
+                </div>
+                <div class="form-group">
+                    <label>Quelle est la bonne réponse ?</label>
+                    <select class="quiz-correct-choice">
+                        <option value="1">Proposition 1</option>
+                        <option value="2">Proposition 2</option>
+                    </select>
+                </div>
+            `;
+            container.appendChild(block);
+        }
+
+        // ==========================================
+        // SOUMISSION DES FORMULAIRES (API CALLS)
+        // ==========================================
+
+        document.getElementById('course-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                title: document.getElementById('course-title').value,
+                content_tag: document.getElementById('course-tag').value.toLowerCase().trim(),
+                module_id: parseInt(document.getElementById('course-module-id').value)
+            };
+            try {
+                await apiCall('/api/enseignant/courses', 'POST', payload);
+                showMessage("Cours créé avec succès !", "success");
+                document.getElementById('course-form').reset();
+                await loadTeacherCourses(); // Rafraîchit la liste déroulante
+            } catch (error) {}
+        });
+
+        document.getElementById('lesson-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const courseId = document.getElementById('les-course-id').value;
+            if (!courseId) {
+                showMessage("Veuillez sélectionner un cours valide.", "error");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('title', document.getElementById('les-title').value);
+            formData.append('course_id', courseId);
+            formData.append('file', document.getElementById('les-file').files[0]);
+
+            try {
+                await apiCall('/api/enseignant/lessons', 'POST', formData);
+                showMessage("Ressource pédagogique uploadée avec succès !", "success");
+                document.getElementById('lesson-form').reset();
+            } catch (error) {}
+        });
+
+        document.getElementById('quiz-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const tag = document.getElementById('question-tag').value.toLowerCase().trim();
+            const questionBlocks = document.querySelectorAll('.quiz-question-block');
+            const questions = [];
+
+            questionBlocks.forEach((block) => {
+                const text = block.querySelector('.quiz-question-text').value.trim();
+                const choiceInputs = Array.from(block.querySelectorAll('.quiz-choice'));
+                const choices = choiceInputs.map((input) => ({
+                    text: input.value.trim(),
+                    is_correct: false
+                }));
+
+                const correctChoiceIndex = parseInt(block.querySelector('.quiz-correct-choice').value, 10) - 1;
+                if (choices[correctChoiceIndex]) {
+                    choices[correctChoiceIndex].is_correct = true;
+                }
+
+                if (text && choices.every(choice => choice.text)) {
+                    questions.push({ text, choices });
+                }
+            });
+
+            if (questions.length === 0) {
+                showMessage("Ajoutez au moins une question valide.", "error");
+                return;
+            }
+
+            // Envoi de la requête à la nouvelle route de la banque de questions par tag
+            const payload = { tag, questions };
+
+            try {
+                // Remplacement de l'ancienne route /teacher/quizzes par la route logique de notre banque de questions
+                await apiCall('/api/enseignant/questions/bank', 'POST', payload);
+                showMessage("Questions ajoutées avec succès à la banque de données !", "success");
+                
+                document.getElementById('quiz-form').reset();
+                document.getElementById('quiz-questions-container').innerHTML = '';
+                addQuizQuestion(); // Remet un bloc vide par défaut
+            } catch (error) {}
+        });
+
+        // Initialisation de la page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModules();
+            loadTeacherCourses();
+            addQuizQuestion();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LMS - Certificat de Réussite</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+            background-color: #f3f4f6;
+        }
+        .certificate-wrapper {
+            background-color: #fff;
+            padding: 2rem;
+            border: 10px solid var(--primary);
+            border-radius: 12px;
+            text-align: center;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .certificate-header {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 1rem;
+            font-family: 'Georgia', serif;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        .certificate-body {
+            font-size: 1.2rem;
+            margin: 2rem 0;
+            line-height: 1.8;
+        }
+        .student-name {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--text-color);
+            margin: 1rem 0;
+            text-decoration: underline;
+            text-underline-offset: 8px;
+        }
+        .module-name {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-hover);
+        }
+        .qr-box {
+            margin-top: 1.5rem;
+            display: flex;
+            justify-content: center;
+        }
+        .qr-box img {
+            width: 140px;
+            height: 140px;
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            background: #fff;
+        }
+        .certificate-footer {
+            margin-top: 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+        .signature-line {
+            border-top: 1px solid var(--text-color);
+            width: 200px;
+            padding-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+        .badge {
+            width: 100px;
+            height: 100px;
+            background-color: #FBBF24;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: bold;
+            font-size: 0.8rem;
+            text-align: center;
+            border: 4px dashed #fff;
+            box-shadow: 0 0 0 4px #FBBF24;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+        }
+        .btn-pdf {
+            background-color: #10B981; /* Vert pour le téléchargement PDF */
+            color: white;
+        }
+        .btn-pdf:hover {
+            background-color: #059669;
+        }
+        
+        @media print {
+            body { background: white; padding: 0; }
+            .no-print { display: none !important; }
+            .certificate-wrapper { box-shadow: none; border-color: #333; }
+        }
+    </style>
+</head>
+<body>
+    
+    <div style="width: 100%; max-width: 800px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;" class="no-print">
+        <a href="/etudiant" style="color: var(--primary); text-decoration: none; font-weight: bold;">&larr; Retour au Dashboard</a>
+        <div class="action-buttons">
+            <button onclick="window.print()" style="padding: 0.5rem 1rem;">Imprimer l'aperçu</button>
+            <button id="download-pdf-btn" class="btn-pdf" style="padding: 0.5rem 1rem;">⬇️ Télécharger le PDF Officiel</button>
+        </div>
+    </div>
+
+    <div class="certificate-wrapper">
+        <div class="certificate-header">
+            Certificat de Réussite
+        </div>
+        
+        <div class="certificate-body">
+            <p>Ceci certifie que</p>
+            <div class="student-name" id="cert-student">Nom de l'étudiant</div>
+            <p>a complété avec succès toutes les exigences requises pour :</p>
+            <div class="module-name" id="cert-title">Titre de la formation</div>
+
+            <div class="qr-box">
+                <img id="cert-qr" alt="Code QR du certificat" />
+            </div>
+        </div>
+        
+        <div class="certificate-footer">
+            <div class="signature-line">
+                Date de délivrance<br>
+                <span id="cert-date"></span>
+            </div>
+            
+            <div class="badge">
+                LMS<br>CERTIFIED
+            </div>
+            
+            <div class="signature-line">
+                Signature de l'Instructeur<br>
+                <em>Le Promoteur</em>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Extraction des paramètres passés dans l'URL depuis le Dashboard Étudiant
+        // Exemple d'URL : /certificate?student=Alice&title=Python&type=course&id=5
+        const params = new URLSearchParams(window.location.search);
+        
+        const studentName = params.get('student') || 'Étudiant Anonyme';
+        const certTitle = params.get('title') || 'Formation non spécifiée';
+        const certType = params.get('type') || 'course'; // 'course' ou 'module'
+        const certId = params.get('id');
+
+        // Hydratation de la vue HTML
+        document.getElementById('cert-student').innerText = studentName;
+        document.getElementById('cert-title').innerText = certTitle;
+
+        // Génération de l'image du QR code via l'API utilitaire du backend
+        const qrImage = document.getElementById('cert-qr');
+        qrImage.src = `/api/certificate/qr?student=${encodeURIComponent(studentName)}&course=${encodeURIComponent(certTitle)}`;
+        qrImage.alt = `Code QR de sécurité pour ${studentName}`;
+        
+        // Affichage de la date courante formatée
+        const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+        document.getElementById('cert-date').innerText = today;
+
+        // Gestion du bouton de téléchargement du PDF Officiel
+        const downloadBtn = document.getElementById('download-pdf-btn');
+        if (certId) {
+            downloadBtn.addEventListener('click', () => {
+                // Routage dynamique vers le bon endpoint backend en fonction du type (cours ou module)
+                const apiRoute = certType === 'module' 
+                    ? `/api/certificate/module/${certId}/get-certificate`
+                    : `/api/certificate/course/${certId}/get-certificate`;
+                
+                // Ouvre le téléchargement du PDF dans un nouvel onglet
+                window.open(apiRoute, '_blank');
+            });
+        } else {
+            // Si aucun ID n'est fourni, on masque le bouton pour éviter une erreur 404
+            downloadBtn.style.display = 'none';
+        }
+    </script>
+</body>
+</html>

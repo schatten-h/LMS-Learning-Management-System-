@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LMS - Espace Promoteur</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        .form-card {
+            background: #fff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            border: 1px solid #e5e7eb;
+        }
+        .form-card h3 {
+            color: var(--primary);
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #f3f4f6;
+            padding-bottom: 0.5rem;
+        }
+        .module-item {
+            background: #F9FAFB;
+            border: 1px solid #E5E7EB;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+        @media (max-width: 768px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container" style="max-width: 1000px; margin: 2rem auto;">
+        
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <h2>👑 Espace Promoteur (Administration)</h2>
+            <button onclick="logout()" class="btn-logout" style="background-color: #EF4444; color: white;">Se déconnecter</button>
+        </header>
+
+        <div id="message-box"></div>
+
+        <div class="dashboard-grid">
+            
+            <div>
+                <div class="form-card" style="margin-bottom: 1.5rem;">
+                    <h3>1. Créer un Nouveau Module (Cohorte)</h3>
+                    <p style="font-size: 0.85rem; color: #6B7280; margin-bottom: 1rem;">
+                        Un module regroupe plusieurs cours. Les enseignants pourront y rattacher leurs créations.
+                    </p>
+                    <form id="module-form">
+                        <div class="form-group">
+                            <label for="mod-title">Titre du Module</label>
+                            <input type="text" id="mod-title" placeholder="Ex: Masterclass Développement Web" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="mod-desc">Description</label>
+                            <textarea id="mod-desc" rows="3" placeholder="Description des objectifs du module..." required style="width: 100%; padding: 0.5rem; border: 1px solid #D1D5DB; border-radius: 4px;"></textarea>
+                        </div>
+                        <button type="submit" style="background: #10B981; color: white; width: 100%;">Créer le Module</button>
+                    </form>
+                </div>
+
+                <div class="form-card">
+                    <h3>2. Inscription Manuelle</h3>
+                    <p style="font-size: 0.85rem; color: #6B7280; margin-bottom: 1rem;">
+                        Inscrivez directement un étudiant à un cours spécifique.
+                    </p>
+                    <form id="assign-form">
+                        <div class="form-group">
+                            <label for="assign-user">Étudiant</label>
+                            <select id="assign-user" required>
+                                <option value="">Chargement des étudiants...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="assign-course">Cours ciblé</label>
+                            <select id="assign-course" required>
+                                <option value="">Chargement des cours...</option>
+                            </select>
+                        </div>
+                        <button type="submit" style="width: 100%;">Inscrire l'étudiant</button>
+                    </form>
+                </div>
+            </div>
+
+            <div>
+                <div class="form-card" style="height: 100%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3>3. Supervision des Modules</h3>
+                        <button onclick="loadModulesList()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">🔄 Actualiser</button>
+                    </div>
+                    
+                    <div id="modules-container" style="margin-top: 1rem;">
+                        <p class="loading-text">Chargement des modules existants...</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    
+    <script>
+        // CHARGEMENT DES DONNÉES
+
+        // Charger les modules pour la supervision
+        async function loadModulesList() {
+            const container = document.getElementById('modules-container');
+            container.innerHTML = '<p class="loading-text">Chargement...</p>';
+            
+            try {
+                // Route promoteur pour récupérer tous les modules et leurs stats
+                const modules = await apiCall('/api/promoteur/modules', 'GET');
+                
+                if (modules.length === 0) {
+                    container.innerHTML = '<p style="color: #6B7280; font-style: italic;">Aucun module créé pour le moment.</p>';
+                    return;
+                }
+
+                let html = '';
+                modules.forEach(mod => {
+                    html += `
+                        <div class="module-item">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                                <strong style="color: #1F2937; font-size: 1.1rem;">📦 ${mod.title}</strong>
+                                <span style="background: #E0E7FF; color: #4F46E5; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">ID: ${mod.id}</span>
+                            </div>
+                            <p style="font-size: 0.85rem; color: #4B5563; margin-bottom: 0.75rem;">${mod.description}</p>
+                            <div style="font-size: 0.85rem; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 0.5rem;">
+                                <span>📚 ${mod.courses_count || 0} Cours attachés</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                container.innerHTML = html;
+            } catch (error) {
+                container.innerHTML = '<p style="color: red;">Erreur de chargement des modules.</p>';
+            }
+        }
+
+        // Charger la liste des étudiants pour l'assignation
+        async function loadStudents() {
+            try {
+                const students = await apiCall('/api/promoteur/users?role=etudiant', 'GET');
+                const select = document.getElementById('assign-user');
+                select.innerHTML = '<option value="">-- Choisir un étudiant --</option>';
+                
+                students.forEach(student => {
+                    const option = document.createElement('option');
+                    option.value = student.id;
+                    option.textContent = `${student.username} (${student.email})`;
+                    select.appendChild(option);
+                });
+            } catch (error) {}
+        }
+
+        // Charger la liste globale des cours pour l'assignation
+        async function loadAllCourses() {
+            try {
+                const courses = await apiCall('/api/promoteur/courses', 'GET');
+                const select = document.getElementById('assign-course');
+                select.innerHTML = '<option value="">-- Choisir un cours --</option>';
+                
+                courses.forEach(course => {
+                    const option = document.createElement('option');
+                    option.value = course.id;
+                    option.textContent = `[Mod: ${course.module_id}] ${course.title}`;
+                    select.appendChild(option);
+                });
+            } catch (error) {}
+        }
+
+        // SOUMISSION DES FORMULAIRES
+
+        // Créer un Module
+        document.getElementById('module-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const payload = {
+                title: document.getElementById('mod-title').value,
+                description: document.getElementById('mod-desc').value
+            };
+
+            try {
+                await apiCall('/api/promoteur/modules', 'POST', payload);
+                showMessage("Module créé avec succès !", "success");
+                document.getElementById('module-form').reset();
+                loadModulesList(); // Rafraîchir la liste de droite
+            } catch (error) {}
+        });
+
+        // Assigner manuellement un étudiant à un cours
+        document.getElementById('assign-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userId = document.getElementById('assign-user').value;
+            const courseId = document.getElementById('assign-course').value;
+
+            if (!userId || !courseId) {
+                showMessage("Veuillez sélectionner un étudiant et un cours.", "error");
+                return;
+            }
+
+            try {
+                // Inscription forcée via le promoteur
+                await apiCall(`/api/promoteur/enroll`, 'POST', { user_id: parseInt(userId), course_id: parseInt(courseId) });
+                showMessage("L'étudiant a été inscrit au cours avec succès !", "success");
+                document.getElementById('assign-form').reset();
+            } catch (error) {}
+        });
+
+        // Initialisation au chargement de la page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadModulesList();
+            loadStudents();
+            loadAllCourses();
+        });
+    </script>
+</body>
+</html>

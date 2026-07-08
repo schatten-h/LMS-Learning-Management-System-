@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LMS - Dashboard Étudiant</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .badge-status {
+            padding: 0.25rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: white;
+        }
+        .bg-gray { background-color: #6B7280; }
+        .bg-blue { background-color: #3B82F6; }
+        .bg-green { background-color: #10B981; }
+        
+        .progress-bar-container {
+            width: 100%;
+            background-color: #E5E7EB;
+            border-radius: 8px;
+            height: 8px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #4F46E5;
+            transition: width 0.4s ease;
+        }
+        
+        .evaluation-box {
+            background-color: #FEF3C7;
+            border: 1px solid #F59E0B;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-top: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h2>🎓 Mon Espace Apprentissage</h2>
+            <button onclick="logout()" class="btn-logout" style="background-color: #EF4444; color: white;">Se déconnecter</button>
+        </header>
+
+        <div id="message-box"></div>
+
+        <div class="dashboard-grid">
+            
+            <div class="stat-card">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>📚 Mes Cours En Cours</h3>
+                    <button id="refresh-btn" onclick="fetchDashboardData()" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">🔄 Actualiser</button>
+                </div>
+                
+                <div id="enrollments-container">
+                    <p class="loading-text">Chargement de tes cours...</p>
+                </div>
+                
+                <hr style="margin: 1.5rem 0; border: 0; border-top: 1px solid #E5E7EB;">
+                
+                <h4>🔍 Catalogue des Formations</h4>
+                <div id="catalog-container">
+                    <p class="loading-text">Chargement du catalogue...</p>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <h3>🏆 Mes Certificats Officiels</h3>
+                <p style="font-size: 0.85rem; color: #6B7280; margin-bottom: 1rem;">Seul le Promoteur peut te délivrer les certificats globaux des modules.</p>
+                <div id="certificates-container">
+                    <p class="loading-text">Chargement de tes succès...</p>
+                </div>
+            </div>
+
+        </div>
+
+        <div id="study-panel" class="form-card" style="margin-top: 2rem; display: none;"></div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    
+    <script>
+        let currentStudentUsername = ""; // Pour pré-remplir les certificats HTML
+
+        // ==========================================
+        // 1. AFFICHAGE DES INSCRIPTIONS ET DU CATALOGUE
+        // ==========================================
+        
+        function renderEnrollments(enrollments) {
+            const container = document.getElementById('enrollments-container');
+                
+            if (!enrollments || enrollments.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="text-align: center; padding: 2rem 0;">
+                        <div style="font-size: 2rem;">📁</div>
+                        <p style="color: #6B7280; font-size: 0.9rem;">Tu n'es inscrit à aucun cours.</p>
+                    </div>`;
+                return;
+            }
+
+            let listHTML = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
+            enrollments.forEach(cours => {
+                let badge = '<span class="badge-status bg-gray">À Commencer</span>';
+                if (cours.status === 'en_cours') badge = '<span class="badge-status bg-blue">En Cours</span>';
+                if (cours.status === 'termine') badge = '<span class="badge-status bg-green">Terminé</span>';
+
+                listHTML += `
+                    <div style="padding: 1rem; background: #F9FAFB; border-radius: 8px; border: 1px solid #E5E7EB;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                            <strong>📖 ${cours.course_title}</strong>
+                            ${badge}
+                        </div>
+                        <div style="font-size: 0.85rem; color: #4B5563;">Score global: ${cours.progress}%</div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" style="width: ${cours.progress}%;"></div>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                            <button onclick="loadStudyPanel(${cours.course_id}, '${cours.course_title}')" style="background: #4F46E5; color: white; flex: 1;">Accéder au cours</button>
+                            ${cours.status === 'termine' ? `<button onclick="downloadCourseCertificate(${cours.course_id}, '${cours.course_title}')" style="background: #10B981; color: white;">Certificat HTML</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            listHTML += '</div>';
+            container.innerHTML = listHTML;
+        }
+
+        function renderCatalog(courses, enrollments) {
+            const targetEl = document.getElementById('catalog-container');
+            if (!targetEl) return;
+
+            if (!courses || courses.length === 0) {
+                targetEl.innerHTML = '<p style="color: #6B7280; font-style: italic;">Aucun cours dans le catalogue.</p>';
+                return;
+            }
+
+            const enrolledIds = enrollments.map(e => e.course_id);
+            const availableCourses = courses.filter(c => !enrolledIds.includes(c.id));
+
+            if (availableCourses.length === 0) {
+                targetEl.innerHTML = '<p style="color: #10B981; font-weight: 500; font-size: 0.9rem;">🎉 Tu es inscrit à tous les cours existants !</p>';
+                return;
+            }
+
+            let catalogHTML = '<div style="display: flex; flex-direction: column; gap: 0.75rem;">';
+            availableCourses.forEach(cours => {
+                catalogHTML += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: white; border: 1px solid #E5E7EB; border-radius: 6px;">
+                        <span style="font-weight: 500; font-size: 0.9rem;">${cours.title}</span>
+                        <button onclick="enrollInCourse(${cours.id})" style="padding: 0.3rem 0.6rem; font-size: 0.8rem; background: #6B7280; color: white;">S'inscrire</button>
+                    </div>
+                `;
+            });
+            catalogHTML += '</div>';
+            targetEl.innerHTML = catalogHTML;
+        }
+
+        // ==========================================
+        // 2. ZONE D'ÉTUDE (LEÇONS + ÉVALUATION FINALE 70/30)
+        // ==========================================
+
+        async function loadStudyPanel(courseId, courseTitle) {
+            const panel = document.getElementById('study-panel');
+            panel.style.display = 'block';
+            panel.innerHTML = '<p class="loading-text">Chargement du contenu pédagogique...</p>';
+
+            try {
+                // Nouvelle route de notre API pour récupérer les données d'étude
+                const data = await apiCall(`/api/etudiant/study/${courseId}`, 'GET');
+                const enrollment = data.enrollment;
+                const lessons = data.lessons;
+
+                let html = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #F3F4F6; padding-bottom: 1rem; margin-bottom: 1.5rem;">
+                        <h3 style="margin: 0;">📚 Zone d'étude : ${courseTitle}</h3>
+                        <button onclick="document.getElementById('study-panel').style.display='none'" style="background: transparent; color: #6B7280;">❌ Fermer</button>
+                    </div>
+                `;
+
+                // A. Affichage des Leçons Vidéos/PDF
+                if (lessons.length === 0) {
+                    html += `<p style="color: #6B7280; font-style: italic;">L'enseignant n'a pas encore ajouté de contenu à ce cours.</p>`;
+                } else {
+                    html += `<div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 2rem;">`;
+                    lessons.forEach((lesson, index) => {
+                        html += `
+                            <div style="padding: 1rem; border: 1px solid #E5E7EB; border-left: 4px solid #4F46E5; border-radius: 4px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <strong>Leçon ${index + 1} : ${lesson.title}</strong>
+                                    ${lesson.file_path ? `<a href="/${lesson.file_path}" target="_blank" style="color: #4F46E5; font-size: 0.9rem; text-decoration: underline;">Ouvrir le document</a>` : '<span style="color: #9CA3AF; font-size: 0.8rem;">Aucun fichier</span>'}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                    
+                    // Bouton pour valider la présence (Les fameux 70 points de l'architecture)
+                    if (enrollment.progress < 70) {
+                        html += `
+                            <div style="background: #EFF6FF; padding: 1rem; border-radius: 8px; text-align: center; margin-bottom: 2rem;">
+                                <p style="margin-bottom: 1rem; color: #1E3A8A; font-size: 0.95rem;">Avez-vous terminé de consulter toutes les leçons ? (Valide 70% de la note finale)</p>
+                                <button onclick="markPresence(${courseId})" style="background: #3B82F6; color: white;">✅ Valider mon visionnage</button>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div style="background: #ECFDF5; padding: 0.75rem; border-radius: 8px; text-align: center; margin-bottom: 2rem; color: #065F46; font-size: 0.9rem; font-weight: bold;">
+                                ✅ Visionnage validé (70/100 points acquis).
+                            </div>
+                        `;
+                    }
+                }
+
+                // B. Affichage de l'Évaluation Finale (Quiz dynamique par Tag)
+                if (enrollment.progress >= 70 && enrollment.status !== 'termine') {
+                    html += `
+                        <div class="evaluation-box">
+                            <h4 style="color: #B45309; margin-top: 0; margin-bottom: 1rem;">🎯 Évaluation Finale (30% de la note)</h4>
+                            <p style="font-size: 0.9rem; color: #92400E; margin-bottom: 1rem;">Répondez aux questions suivantes pour valider définitivement le cours.</p>
+                            <div id="quiz-container-${courseId}">
+                                <button onclick="generateFinalQuiz(${courseId})" style="background: #F59E0B; color: white;">Lancer l'évaluation</button>
+                            </div>
+                        </div>
+                    `;
+                } else if (enrollment.status === 'termine') {
+                    html += `
+                        <div style="background: #ECFDF5; border: 1px solid #10B981; padding: 1.5rem; border-radius: 8px; text-align: center;">
+                            <h4 style="color: #065F46; margin-top: 0;">🎉 Cours validé avec succès !</h4>
+                            <p style="color: #047857; margin-bottom: 1rem;">Note finale : ${enrollment.progress}%</p>
+                            <button onclick="downloadCourseCertificate(${courseId}, '${courseTitle}')" style="background: #10B981; color: white;">Voir mon Certificat</button>
+                        </div>
+                    `;
+                }
+
+                panel.innerHTML = html;
+                // Scroll doux vers la zone d'étude
+                panel.scrollIntoView({ behavior: 'smooth' });
+
+            } catch (error) {
+                panel.innerHTML = '<p style="color: #DC2626;">Impossible de charger ce cours.</p>';
+            }
+        }
+
+        // ==========================================
+        // 3. LOGIQUE MÉTIER (NOTATION ET QUIZ)
+        // ==========================================
+
+        async function markPresence(courseId) {
+            try {
+                // L'étudiant valide son visionnage pour obtenir la note de base (70/100)
+                await apiCall(`/api/etudiant/course/${courseId}/presence`, 'POST');
+                showMessage("Visionnage validé ! Tu as obtenu 70 points.", "success");
+                await fetchDashboardData();
+                await loadStudyPanel(courseId, "Cours mis à jour");
+            } catch (error) {}
+        }
+
+        async function generateFinalQuiz(courseId) {
+            const container = document.getElementById(`quiz-container-${courseId}`);
+            container.innerHTML = '<p style="color: #92400E;">Génération de l\'évaluation...</p>';
+
+            try {
+                // On demande à l'API de piocher dans la banque de questions via le Tag du cours
+                const questions = await apiCall(`/api/etudiant/course/${courseId}/generate-quiz`, 'POST');
+                
+                if (questions.length === 0) {
+                    container.innerHTML = `<p style="color: #DC2626; font-weight: bold;">L'enseignant n'a pas encore préparé de questions pour ce cours. (Tag introuvable).</p>`;
+                    return;
+                }
+
+                let formHTML = `<form onsubmit="event.preventDefault(); submitFinalQuiz(${courseId}, this)">`;
+                questions.forEach((q, index) => {
+                    formHTML += `
+                        <div style="background: white; padding: 1rem; border-radius: 6px; margin-bottom: 1rem; border: 1px solid #FDE68A;">
+                            <strong style="display: block; margin-bottom: 0.5rem; color: #92400E;">Q${index + 1}. ${q.text}</strong>
+                            ${q.choices.map(choice => `
+                                <label style="display: block; margin-bottom: 0.4rem; cursor: pointer;">
+                                    <input type="radio" name="q_${q.id}" value="${choice.id}" required>
+                                    ${choice.text}
+                                </label>
+                            `).join('')}
+                        </div>
+                    `;
+                });
+                formHTML += `
+                    <button type="submit" style="background: #D97706; color: white; width: 100%; margin-top: 0.5rem;">Valider mes réponses</button>
+                </form>`;
+
+                container.innerHTML = formHTML;
+
+            } catch (error) {
+                container.innerHTML = `<p style="color: #DC2626;">Erreur de génération du quiz.</p>`;
+            }
+        }
+
+        async function submitFinalQuiz(courseId, formElement) {
+            const answers = [];
+            formElement.querySelectorAll('input[type="radio"]:checked').forEach(input => {
+                const questionId = Number(input.name.replace('q_', ''));
+                answers.push({ question_id: questionId, choice_id: Number(input.value) });
+            });
+
+            try {
+                // Envoi des réponses pour calculer les 30 points restants
+                const result = await apiCall(`/api/etudiant/course/${courseId}/submit-quiz`, 'POST', answers);
+                
+                showMessage(`Quiz évalué ! Ta note finale est de ${result.new_progress}%`, "success");
+                await fetchDashboardData();
+                await loadStudyPanel(courseId, "Cours validé");
+            } catch (error) {}
+        }
+
+
+        // ==========================================
+        // 4. GESTION DES INSCRIPTIONS & CERTIFICATS
+        // ==========================================
+
+        async function enrollInCourse(courseId) {
+            try {
+                await apiCall(`/api/etudiant/enroll/${courseId}`, 'POST');
+                showMessage("Inscription réussie !");
+                fetchDashboardData(); 
+            } catch (error) {}
+        }
+
+        function renderCertificates(certificates) {
+            const container = document.getElementById('certificates-container');
+            if (!container) return;
+            
+            if (!certificates || certificates.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state" style="text-align: center; padding: 1.5rem 0;">
+                        <div style="font-size: 2rem;">📜</div>
+                        <p style="color: #6B7280; font-size: 0.85rem;">Aucun certificat global obtenu.</p>
+                    </div>`;
+                return;
+            }
+
+            let listHTML = '<div style="display: flex; flex-direction: column; gap: 0.75rem;">';
+            certificates.forEach(certif => {
+                // Le Promoteur a validé un module complet
+                listHTML += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 6px;">
+                        <div>
+                            <strong style="color: #B45309; display: block;">🏆 ${certif.module_title}</strong>
+                            <span style="font-size: 0.75rem; color: #D97706;">Délivré le ${new Date(certif.issued_at).toLocaleDateString('fr-FR')}</span>
+                        </div>
+                        <button onclick="downloadModuleCertificate(${certif.module_id}, '${certif.module_title}')" style="background: #F59E0B; color: white; padding: 0.3rem 0.6rem; font-size: 0.8rem;">Voir le PDF</button>
+                    </div>
+                `;
+            });
+            listHTML += '</div>';
+            container.innerHTML = listHTML;
+        }
+
+        // Redirection vers la page HTML esthétique du certificat (qui elle-même proposera le PDF)
+        function downloadCourseCertificate(courseId, courseTitle) {
+            const url = `/certificate?student=${encodeURIComponent(currentStudentUsername)}&title=${encodeURIComponent(courseTitle)}&type=course&id=${courseId}`;
+            window.open(url, '_blank');
+        }
+
+        function downloadModuleCertificate(moduleId, moduleTitle) {
+            const url = `/certificate?student=${encodeURIComponent(currentStudentUsername)}&title=${encodeURIComponent(moduleTitle)}&type=module&id=${moduleId}`;
+            window.open(url, '_blank');
+        }
+
+
+        // ==========================================
+        // INITIALISATION
+        // ==========================================
+
+        async function fetchDashboardData() {
+            try {
+                // Récupération des données consolidées de l'étudiant
+                const dashboardData = await apiCall('/api/etudiant/dashboard', 'GET'); 
+                
+                // Sauvegarde du nom d'utilisateur pour générer les certificats HTML proprement
+                if (dashboardData.student_name) currentStudentUsername = dashboardData.student_name;
+
+                renderEnrollments(dashboardData.enrollments);
+                renderCertificates(dashboardData.certificates);
+                
+                // Récupération du catalogue
+                const catalogData = await apiCall('/api/etudiant/catalog', 'GET');
+                renderCatalog(catalogData, dashboardData.enrollments);
+            } catch (error) {}
+        }
+
+        document.addEventListener('DOMContentLoaded', fetchDashboardData);
+    </script>
+</body>
+</html>
