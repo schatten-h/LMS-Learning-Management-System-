@@ -94,7 +94,7 @@
                 <div class="form-card" style="margin-top: 1.5rem;">
                     <h3>3. Délivrer un Certificat de Module</h3>
                     <p style="font-size: 0.85rem; color: #6B7280; margin-bottom: 1rem;">
-                        Saisissez l'ID du module et celui de l'étudiant pour délivrer le certificat.
+                        Saisissez l'ID du module et le nom de l'étudiant pour délivrer le certificat.
                     </p>
                     <form id="certificate-form">
                         <div class="form-group">
@@ -102,8 +102,8 @@
                             <input type="number" id="certificate-module" placeholder="Ex: 1" required>
                         </div>
                         <div class="form-group">
-                            <label for="certificate-student">ID de l'Étudiant</label>
-                            <input type="number" id="certificate-student" placeholder="Ex: 45" required>
+                            <label for="certificate-student">Nom de l'Étudiant</label>
+                            <input type="text" id="certificate-student" placeholder="Ex: Dupont Jean" required>
                         </div>
                         <button type="submit" style="background: #10B981; color: white; width: 100%;">Délivrer le Certificat</button>
                     </form>
@@ -248,9 +248,9 @@
         });
 
         // Fonction pour délivrer le certificat côté Promoteur
-        async function delivrerCertificatModule(moduleId, studentId) {
+        async function delivrerCertificatModule(moduleId, studentName) {
             try {
-                const response = await apiCall(`/api/promoteur/modules/${moduleId}/issue-certificate/${studentId}`, 'POST');
+                const response = await apiCall(`/api/promoteur/modules/${moduleId}/issue-certificate/${encodeURIComponent(studentName)}`, 'POST');
                 alert(response.msg || "Certificat délivré avec succès !");
                 document.getElementById('certificate-form').reset();
                 // Optionnel : Rafraîchir l'interface du promoteur ici
@@ -264,14 +264,14 @@
         document.getElementById('certificate-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const moduleId = document.getElementById('certificate-module').value;
-            const studentId = document.getElementById('certificate-student').value;
+            const studentName = document.getElementById('certificate-student').value;
 
-            if (!moduleId || !studentId) {
-                showMessage("Veuillez renseigner l'ID du module et l'ID de l'étudiant.", "error");
+            if (!moduleId || !studentName) {
+                showMessage("Veuillez renseigner l'ID du module et le nom de l'étudiant.", "error");
                 return;
             }
 
-            await delivrerCertificatModule(parseInt(moduleId), parseInt(studentId));
+            await delivrerCertificatModule(parseInt(moduleId), studentName);
         });
 
         // Initialisation au chargement de la page

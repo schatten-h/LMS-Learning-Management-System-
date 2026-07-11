@@ -147,24 +147,24 @@ def get_students_progress(
     return output
 
 
-@router.post("/modules/{module_id}/issue-certificate/{student_id}")
+@router.post("/modules/{module_id}/issue-certificate/{student_username}")
 def issue_module_certificate(
     module_id: int,
-    student_id: int,
+    student_username: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(RequireRole(["promoteur"]))
 ):
     """
-    Délivre manuellement un certificat de module à un étudiant.
+    Délivre manuellement un certificat de module à un étudiant via son nom d'utilisateur.
     """
     module = db.query(Module).filter(Module.id == module_id).first()
-    student = db.query(User).filter(User.id == student_id, User.role == "etudiant").first()
+    student = db.query(User).filter(User.username == student_username, User.role == "etudiant").first()
 
     if not module or not student:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module ou étudiant introuvable.")
         
     existing_cert = db.query(Certificate).filter_by(
-        student_id=student_id, 
+        student_id=student.id, 
         module_id=module_id
     ).first()
     
@@ -172,7 +172,7 @@ def issue_module_certificate(
         return {"msg": "Cet étudiant possède déjà le certificat pour ce module."}
         
     new_certificate = Certificate(
-        student_id=student_id,
+        student_id=student.id,
         module_id=module_id,
         issue_date=datetime.utcnow()
     )
