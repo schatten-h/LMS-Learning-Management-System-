@@ -12,7 +12,6 @@ class ChoiceCreate(ChoiceBase):
 
 class ChoiceResponse(ChoiceBase):
     id: int
-    # model_config permet à Pydantic de lire directement les objets SQLAlchemy ORM
     model_config = ConfigDict(from_attributes=True)
 
 class QuestionCreate(BaseModel):
@@ -27,21 +26,9 @@ class QuestionResponse(BaseModel):
     choices: List[ChoiceResponse] # Filtré : 'is_correct' n'est pas envoyé au front-end !
     model_config = ConfigDict(from_attributes=True)
 
-# 1. Structure d'un choix dans une question
-class ChoiceCreate(BaseModel):
-    text: str
-    is_correct: bool
-
-# 2. Structure d'une question individuelle
-class QuestionCreate(BaseModel):
-    text: str
-    choices: List[ChoiceCreate]
-
-# 3. Structure du payload principal reçu par l'API
 class BankQuestionsPayload(BaseModel):
     tag: str
     questions: List[QuestionCreate]
-
 
 # =====================================================================
 # SECTION 2 : ÉVALUATIONS & SOUMISSIONS (Moteur 30%)
@@ -52,9 +39,8 @@ class SubmitAnswer(BaseModel):
     choice_id: int
 
 class SubmitQuiz(BaseModel):
-    course_id: int # Crucial : lie directement la soumission au parcours de l'étudiant
+    course_id: int 
     answers: List[SubmitAnswer]
-
 
 # =====================================================================
 # SECTION 3 : AUTHENTIFICATION & UTILISATEURS
@@ -62,19 +48,20 @@ class SubmitQuiz(BaseModel):
 
 class UserCreate(BaseModel):
     username: str
+    email: str
     password: str
-    role: str = "student" # 'admin', 'teacher', 'student'
+    role: str = "etudiant" 
 
 class UserLogin(BaseModel):
-    username: str
+    identifier: str
     password: str
 
 class UserResponse(BaseModel):
     id: int
     username: str
+    email: Optional[str] = None
     role: str
     model_config = ConfigDict(from_attributes=True)
-
 
 # =====================================================================
 # SECTION 4 : ARCHITECTURE APPRENTISSAGE (360Learning-like)
@@ -104,7 +91,6 @@ class CourseResponse(BaseModel):
     teacher_id: int
     model_config = ConfigDict(from_attributes=True)
 
-
 # =====================================================================
 # SECTION 5 : SUIVI DE PROGRESSION & CERTIFICATS (Moteur 70%)
 # =====================================================================
@@ -125,5 +111,5 @@ class IssueCertificate(BaseModel):
     module_id: Optional[int] = None
 
 class ProgressUpdate(BaseModel):
-    is_read: bool
+    is_video_read: bool 
     score: float

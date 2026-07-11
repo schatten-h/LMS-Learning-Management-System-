@@ -90,6 +90,24 @@
                         <button type="submit" style="width: 100%;">Inscrire l'étudiant</button>
                     </form>
                 </div>
+
+                <div class="form-card" style="margin-top: 1.5rem;">
+                    <h3>3. Délivrer un Certificat de Module</h3>
+                    <p style="font-size: 0.85rem; color: #6B7280; margin-bottom: 1rem;">
+                        Saisissez l'ID du module et celui de l'étudiant pour délivrer le certificat.
+                    </p>
+                    <form id="certificate-form">
+                        <div class="form-group">
+                            <label for="certificate-module">ID du Module</label>
+                            <input type="number" id="certificate-module" placeholder="Ex: 1" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="certificate-student">ID de l'Étudiant</label>
+                            <input type="number" id="certificate-student" placeholder="Ex: 45" required>
+                        </div>
+                        <button type="submit" style="background: #10B981; color: white; width: 100%;">Délivrer le Certificat</button>
+                    </form>
+                </div>
             </div>
 
             <div>
@@ -133,7 +151,10 @@
                         <div class="module-item">
                             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
                                 <strong style="color: #1F2937; font-size: 1.1rem;">📦 ${mod.title}</strong>
-                                <span style="background: #E0E7FF; color: #4F46E5; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">ID: ${mod.id}</span>
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <span style="background: #E0E7FF; color: #4F46E5; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">ID: ${mod.id}</span>
+                                    <button type="button" class="delete-module-btn" data-module-id="${mod.id}" style="background: #EF4444; color: white; padding: 0.25rem 0.6rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem;">Supprimer</button>
+                                </div>
                             </div>
                             <p style="font-size: 0.85rem; color: #4B5563; margin-bottom: 0.75rem;">${mod.description}</p>
                             <div style="font-size: 0.85rem; color: #6B7280; border-top: 1px solid #E5E7EB; padding-top: 0.5rem;">
@@ -143,6 +164,15 @@
                     `;
                 });
                 container.innerHTML = html;
+
+                container.querySelectorAll('.delete-module-btn').forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const moduleId = Number(button.getAttribute('data-module-id'));
+                        if (typeof window.deleteModule === 'function') {
+                            window.deleteModule(moduleId);
+                        }
+                    });
+                });
             } catch (error) {
                 container.innerHTML = '<p style="color: red;">Erreur de chargement des modules.</p>';
             }
@@ -215,6 +245,33 @@
                 showMessage("L'étudiant a été inscrit au cours avec succès !", "success");
                 document.getElementById('assign-form').reset();
             } catch (error) {}
+        });
+
+        // Fonction pour délivrer le certificat côté Promoteur
+        async function delivrerCertificatModule(moduleId, studentId) {
+            try {
+                const response = await apiCall(`/api/promoteur/modules/${moduleId}/issue-certificate/${studentId}`, 'POST');
+                alert(response.msg || "Certificat délivré avec succès !");
+                document.getElementById('certificate-form').reset();
+                // Optionnel : Rafraîchir l'interface du promoteur ici
+                // loadModulesList();
+            } catch (error) {
+                console.error("Erreur lors de la délivrance du certificat :", error);
+                alert("Impossible de délivrer le certificat.");
+            }
+        }
+
+        document.getElementById('certificate-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const moduleId = document.getElementById('certificate-module').value;
+            const studentId = document.getElementById('certificate-student').value;
+
+            if (!moduleId || !studentId) {
+                showMessage("Veuillez renseigner l'ID du module et l'ID de l'étudiant.", "error");
+                return;
+            }
+
+            await delivrerCertificatModule(parseInt(moduleId), parseInt(studentId));
         });
 
         // Initialisation au chargement de la page

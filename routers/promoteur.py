@@ -2,9 +2,10 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import User, Module, Certificate, Course, Enrollment
+from models import User, Module, Certificate, Course, Enrollment, Lesson
 from routers.auth import RequireRole
 from schemas import ModuleCreate, ModuleResponse, IssueCertificate
+from datetime import datetime
 
 router = APIRouter()
 
@@ -37,6 +38,77 @@ def list_modules(
     return mods
 
 
+@router.delete("/modules/{module_id}")
+def delete_module(
+    module_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RequireRole(["promoteur"]))
+):
+    """
+    Supprime un module ainsi que tous ses cours, leçons et inscriptions associés.
+    🚀 PERFORMANCE : Le backend FastAPI se contente de déclencher la suppression en cascade sur la DB Neon,
+    ce qui est la méthode la plus robuste et propre.
+    """
+    module = db.query(Module).filter(Module.id == module_id).first()
+    if not module:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module introuvable.")
+
+    # Une seule commande brutale qui déclenche tout en cascade côté Neon
+    db.delete(module)
+    db.commit()
+
+    return {"success": True, "message": "Module et tous les contenus associés supprimés avec succès."}
+
+
+@router.get("/users")
+def list_users(
+    role: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RequireRole(["promoteur"]))
+):
+    """Liste les utilisateurs selon un rôle donné."""
+    query = db.query(User)
+    if role:
+        query = query.filter(User.role == role)
+    return query.all()
+
+
+@router.get("/courses")
+def list_courses(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RequireRole(["promoteur"]))
+):
+    """Liste tous les cours disponibles pour l'administration."""
+    return db.query(Course).all()
+
+
+@router.post("/enroll")
+def enroll_user_to_course(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RequireRole(["promoteur"]))
+):
+    """Inscrit manuellement un étudiant à un cours."""
+    user_id = payload.get("user_id")
+    course_id = payload.get("course_id")
+
+    if not user_id or not course_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_id et course_id sont requis.")
+
+    user = db.query(User).filter(User.id == user_id, User.role == "etudiant").first()
+    course = db.query(Course).filter(Course.id == course_id).first()
+    if not user or not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur ou cours introuvable.")
+
+    existing = db.query(Enrollment).filter(Enrollment.student_id == user_id, Enrollment.course_id == course_id).first()
+    if existing:
+        return {"msg": "L'étudiant est déjà inscrit à ce cours."}
+
+    db.add(Enrollment(student_id=user_id, course_id=course_id, progress=0.0, is_video_read=False, quiz_score=0.0, status="in_progress"))
+    db.commit()
+    return {"msg": "Étudiant inscrit avec succès."}
+
+
 @router.get("/students-progress")
 def get_students_progress(
     db: Session = Depends(get_db), 
@@ -47,7 +119,6 @@ def get_students_progress(
     🚀 PERFORMANCE OPTIMISÉE (Anti-N+1) : Utilisation d'une jointure SQL explicite (JOIN) 
     permettant de tout récupérer en une seule et unique requête base de données.
     """
-    # Une seule requête SQL combinée grâce aux jointures, indispensable pour monter en charge
     query_results = db.query(Enrollment, User, Course).\
         join(User, Enrollment.student_id == User.id).\
         join(Course, Enrollment.course_id == Course.id).\
@@ -76,6 +147,41 @@ def get_students_progress(
     return output
 
 
+@router.post("/modules/{module_id}/issue-certificate/{student_id}")
+def issue_module_certificate(
+    module_id: int,
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RequireRole(["promoteur"]))
+):
+    """
+    Délivre manuellement un certificat de module à un étudiant.
+    """
+    module = db.query(Module).filter(Module.id == module_id).first()
+    student = db.query(User).filter(User.id == student_id, User.role == "etudiant").first()
+
+    if not module or not student:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module ou étudiant introuvable.")
+        
+    existing_cert = db.query(Certificate).filter_by(
+        student_id=student_id, 
+        module_id=module_id
+    ).first()
+    
+    if existing_cert:
+        return {"msg": "Cet étudiant possède déjà le certificat pour ce module."}
+        
+    new_certificate = Certificate(
+        student_id=student_id,
+        module_id=module_id,
+        issue_date=datetime.utcnow()
+    )
+    db.add(new_certificate)
+    db.commit()
+    
+    return {"msg": f"Certificat délivré avec succès à {student.username} pour le module {module.title}."}
+
+
 @router.post("/certificates", status_code=status.HTTP_201_CREATED)
 def issue_certificate(
     payload: IssueCertificate, 
@@ -100,7 +206,6 @@ def issue_certificate(
         if not target_module:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Module introuvable.")
             
-        # Empêcher la double certification pour un même parcours
         existing_cert = db.query(Certificate).filter(
             Certificate.student_id == payload.student_id,
             Certificate.module_id == payload.module_id

@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 import secrets
 import hashlib
+from sqlalchemy import or_
 from database import get_db
 from models import User
 from schemas import UserCreate, UserLogin, UserResponse
@@ -26,18 +27,27 @@ def hash_token(token: str) -> str:
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     """
-    Dépendance globale pour récupérer l'utilisateur connecté via son cookie HTTP-Only.
+    Dépendance globale pour récupérer l'utilisateur connecté via son cookie HTTP-Only
+    ou via un jeton d'Authorization envoyé par le frontend.
     """
-    raw_token = request.cookies.get("session_token")
+    raw_token = None
+
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        raw_token = auth_header.split(" ", 1)[1].strip()
+
+    if not raw_token:
+        raw_token = request.cookies.get("session_token")
+
     if not raw_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Non autorisé : Aucune session active trouvée."
         )
-    
+
     hashed = hash_token(raw_token)
     user = db.query(User).filter(User.session_token_hash == hashed).first()
-    
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -114,37 +124,48 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
 def login(user: UserLogin, response: Response, db: Session = Depends(get_db)):
     """
     Endpoint de connexion.
+    Accepte soit l'email soit le nom d'utilisateur (via user.identifier).
     Génère un jeton de session sécurisé et l'envoie via un cookie HTTP-Only.
     """
-    db_user = db.query(User).filter(User.username == user.username).first()
+    # 1. Recherche par username OU par email avec la fonction or_
+    db_user = db.query(User).filter(
+        or_(
+            User.username == user.identifier,
+            User.email == user.identifier
+        )
+    ).first()
     
+    # 2. Vérification de l'existence et du mot de passe
     if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Identifiants ou mot de passe incorrects."
+            detail="Identifiant ou mot de passe incorrect."
         )
     
-    # Génération d'un token aléatoire sécurisé (64 caractères hexadécimaux)
+    # 3. Génération d'un token aléatoire sécurisé (64 caractères hexadécimaux)
     raw_token = secrets.token_hex(32)
     
-    # Mise à jour du hash de session en BDD
+    # 4. Mise à jour du hash de session en BDD
     db_user.session_token_hash = hash_token(raw_token)
     db.commit()
     
-    # Configuration sécurisée du cookie de session (Protection XSS et CSRF)
+    # 5. Configuration sécurisée du cookie de session (Protection XSS et CSRF)
     response.set_cookie(
         key="session_token",
         value=raw_token,
-        httponly=True,       # Bloque l'accès au cookie via document.cookie en JavaScript (Anti-XSS)
+        httponly=True,       # Bloque l'accès au cookie via document.cookie en JavaScript
         max_age=86400,       # Durée de validité : 24 heures
         samesite="lax",      # Protection standard contre les attaques CSRF
-        secure=False         # Passer à True uniquement lorsque le projet sera déployé en HTTPS
+        secure=True          # ⚠️ Changement critique de False pour True pour le déploiement sécurisé
     )
     
+    # On peut désormais renvoyer l'email dans la réponse si le front-end en a besoin
     return {
         "id": db_user.id,
         "username": db_user.username,
+        "email": db_user.email,
         "role": db_user.role,
+        "token": raw_token,
         "msg": "Connexion réussie."
     }
 

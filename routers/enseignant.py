@@ -19,7 +19,6 @@ from schemas import (
 
 # Configuration globale unique du routeur
 router = APIRouter(
-    prefix="/api/enseignant",
     tags=["Enseignant"]
 )
 
@@ -188,7 +187,6 @@ def add_questions_to_bank(
             new_question = Question(
                 text=q_data.text,
                 tag=norm_tag
-                # teacher_id=current_user.id  <-- À décommenter uniquement si la colonne existe dans ton modèle Question
             )
             db.add(new_question)
             db.flush()
@@ -211,3 +209,29 @@ def add_questions_to_bank(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Erreur lors de l'enregistrement dans Neon : {str(e)}"
         )
+
+
+@router.delete("/courses/{course_id}")
+def delete_course(
+    course_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(RequireRole(["enseignant"]))
+):
+    """
+    Supprime un cours appartenant à l'enseignant connecté.
+    La suppression en cascade se propage aux leçons et inscriptions.
+    """
+    # Vérification stricte de propriété
+    course = db.query(Course).filter(
+        Course.id == course_id, 
+        Course.teacher_id == current_user.id
+    ).first()
+
+    if not course:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cours introuvable ou non autorisé.")
+
+    # Déclenche la cascade côté Neon
+    db.delete(course)
+    db.commit()
+
+    return {"success": True, "message": "Cours supprimé avec succès."}

@@ -1,11 +1,14 @@
 import os
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from database import engine, Base
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from database import engine, Base, get_db
 
 # Importation de tes routeurs fraîchement refactorisés et sécurisés
 from routers import auth, enseignant, etudiant, promoteur, certificate
+from routers.auth import get_current_user
 
 # Création automatique des tables dans ta base de données Neon
 Base.metadata.create_all(bind=engine)
@@ -79,3 +82,48 @@ def lesson_page():
 @app.get("/certificate", response_class=FileResponse, tags=["Pages Front-End"])
 def certificate_page():
     return "static/certificate.html"
+
+@app.delete("/api/admin/delete_module/{module_id}")
+async def delete_module(
+    module_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not current_user or current_user.role not in ["promoteur", "admin"]:
+        raise HTTPException(status_code=403, detail="Accès interdit")
+
+    module = db.execute(text("SELECT id FROM modules WHERE id = :id"), {"id": module_id}).fetchone()
+    if not module:
+        raise HTTPException(status_code=404, detail="Module introuvable")
+
+    db.execute(text("DELETE FROM lessons WHERE course_id IN (SELECT id FROM courses WHERE module_id = :module_id)"), {"module_id": module_id})
+    db.execute(text("DELETE FROM enrollments WHERE course_id IN (SELECT id FROM courses WHERE module_id = :module_id)"), {"module_id": module_id})
+    db.execute(text("DELETE FROM courses WHERE module_id = :module_id"), {"module_id": module_id})
+    db.execute(text("DELETE FROM modules WHERE id = :module_id"), {"module_id": module_id})
+    db.commit()
+
+    return {"success": True, "message": "Module et contenus associés supprimés avec succès"}
+
+@app.delete("/api/enseignant/delete_course/{course_id}")
+async def delete_course(
+    course_id: int,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not current_user or current_user.role != "enseignant":
+        raise HTTPException(status_code=403, detail="Accès interdit")
+
+    course = db.execute(
+        text("SELECT id FROM courses WHERE id = :course_id AND teacher_id = :teacher_id"),
+        {"course_id": course_id, "teacher_id": current_user.id},
+    ).fetchone()
+    if not course:
+        raise HTTPException(status_code=404, detail="Cours introuvable ou non autorisé")
+
+    db.execute(text("DELETE FROM lessons WHERE course_id = :course_id"), {"course_id": course_id})
+    db.execute(text("DELETE FROM enrollments WHERE course_id = :course_id"), {"course_id": course_id})
+    db.execute(text("DELETE FROM courses WHERE id = :course_id"), {"course_id": course_id})
+    db.commit()
+
+    return {"success": True, "message": "Cours supprimé"}
+

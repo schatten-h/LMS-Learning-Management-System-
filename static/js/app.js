@@ -7,6 +7,11 @@ async function apiCall(endpoint, method = 'GET', body = null) {
         credentials: 'include' 
     };
 
+    const savedToken = localStorage.getItem('session_token');
+    if (savedToken) {
+        options.headers['Authorization'] = `Bearer ${savedToken}`;
+    }
+
     if (body) {
         if (body instanceof FormData) {
             options.body = body;
@@ -24,7 +29,11 @@ async function apiCall(endpoint, method = 'GET', body = null) {
         
         // On tente de parser la réponse en JSON
         const data = await response.json().catch(() => ({})); 
-        
+
+        if (data && typeof data === 'object' && data.token) {
+            localStorage.setItem('session_token', data.token);
+        }
+
         if (!response.ok) {
             throw new Error(data.detail || data.msg || "Une erreur est survenue sur le serveur.");
         }
@@ -57,11 +66,28 @@ async function logout() {
     try {
         // Appel explicite vers le routeur d'authentification
         await apiCall('/api/auth/logout', 'POST');
-        // Nettoyage visuel et redirection vers la page de connexion
-        window.location.href = '/login';
     } catch (e) {
         console.error("Erreur critique lors de la déconnexion :", e);
-        // Redirection forcée en cas de désynchronisation
-        window.location.href = '/login'; 
+    } finally {
+        localStorage.removeItem('session_token');
+        window.location.href = '/login';
     }
 }
+
+function deleteModule(moduleId) {
+    const confirmed = confirm("⚠️ Attention : supprimer ce module effacera les cours, leçons et inscriptions associés. Confirmer ?");
+    if (!confirmed) return;
+
+    apiCall(`/api/promoteur/modules/${moduleId}`, 'DELETE')
+        .then((data) => {
+            showMessage(data.message || 'Module supprimé avec succès.', 'success');
+            if (typeof loadModulesList === 'function') {
+                loadModulesList();
+            }
+        })
+        .catch((error) => {
+            console.error('Erreur de suppression du module :', error);
+        });
+}
+
+window.deleteModule = deleteModule;
