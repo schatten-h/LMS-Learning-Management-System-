@@ -1,0 +1,5 @@
+[providers]
+python = true
+
+[phases.setup]
+aptPkgs = ["libpq-dev", "libpq5", "build-essential"]
