@@ -23,7 +23,7 @@ MarkupSafe==3.0.3
 mdurl==0.1.2
 orjson==3.11.9
 passlib==1.7.4
-pillow==10.3.0
+pillow
 psycopg2-binary==2.9.9
 pycparser==3.0
 pydantic==2.13.4
