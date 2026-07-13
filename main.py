@@ -1,3 +1,9 @@
+import bcrypt
+if not hasattr(bcrypt, "__about__"):
+    class BcryptAbout:
+        __version__ = getattr(bcrypt, "__version__", "4.0.0")
+    bcrypt.__about__ = BcryptAbout()
+
 import os
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
