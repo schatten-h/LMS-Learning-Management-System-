@@ -105,7 +105,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         )
 
     # Hachage sécurisé du mot de passe
-    hashed_password = pwd_context.hash(user.password)
+    # On limite le mot de passe brut aux 72 premiers caractères requis par bcrypt
+    hashed_password = pwd_context.hash(user.password[:72])
     
     # Création et sauvegarde de l'utilisateur
     new_user = User(
@@ -136,7 +137,7 @@ def login(user: UserLogin, response: Response, db: Session = Depends(get_db)):
     ).first()
     
     # 2. Vérification de l'existence et du mot de passe
-    if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
+    if not db_user or not pwd_context.verify(user.password[:72], db_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Identifiant ou mot de passe incorrect."
