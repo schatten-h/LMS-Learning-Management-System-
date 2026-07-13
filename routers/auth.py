@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
+import bcrypt
 import secrets
 import hashlib
 from sqlalchemy import or_
@@ -9,9 +9,6 @@ from models import User
 from schemas import UserCreate, UserLogin, UserResponse
 
 router = APIRouter()
-
-# Configuration du contexte de hachage pour les mots de passe (Bcrypt)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Liste stricte des rôles imposés par le cahier des charges du professeur
 ALLOWED_ROLES = ["etudiant", "enseignant", "promoteur"]
@@ -104,9 +101,10 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
             detail="Ce nom d'utilisateur est déjà utilisé."
         )
 
-    # Hachage sécurisé du mot de passe
-    # On limite le mot de passe brut aux 72 premiers caractères requis par bcrypt
-    hashed_password = pwd_context.hash(user.password[:72])
+    # Hachage direct du mot de passe avec bcrypt natif
+    password_bytes = user.password.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(password_bytes, salt).decode("utf-8")
     
     # Création et sauvegarde de l'utilisateur
     new_user = User(
@@ -137,7 +135,9 @@ def login(user: UserLogin, response: Response, db: Session = Depends(get_db)):
     ).first()
     
     # 2. Vérification de l'existence et du mot de passe
-    if not db_user or not pwd_context.verify(user.password[:72], db_user.password_hash):
+    password_bytes = user.password.encode("utf-8")[:72]
+    is_correct = db_user and bcrypt.checkpw(password_bytes, db_user.password_hash.encode("utf-8"))
+    if not db_user or not is_correct:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Identifiant ou mot de passe incorrect."

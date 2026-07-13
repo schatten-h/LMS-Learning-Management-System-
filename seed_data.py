@@ -1,16 +1,17 @@
 # seed_data.py
 from database import SessionLocal, engine
 from models import User, Module, Course, Lesson, Question, Choice, Base
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import bcrypt
 
 def seed():
     db = SessionLocal()
     
     # Remplacement des rôles anglais par les rôles français attendus par tes routeurs
-    teacher = User(username="prof_math", password_hash=pwd_context.hash("password"), role="enseignant")
-    student = User(username="etudiant_test", password_hash=pwd_context.hash("password"), role="etudiant")
+    password_bytes = "password".encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(password_bytes, salt).decode("utf-8")
+    teacher = User(username="prof_math", password_hash=hashed_password, role="enseignant")
+    student = User(username="etudiant_test", password_hash=hashed_password, role="etudiant")
     db.add_all([teacher, student])
     db.commit()
     

@@ -22,7 +22,6 @@ markdown-it-py
 MarkupSafe
 mdurl
 orjson
-passlib==1.7.4
 pillow
 psycopg2-binary
 pycparser
